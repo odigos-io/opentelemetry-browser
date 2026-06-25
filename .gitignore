@@ -1,0 +1,6 @@
+node_modules
+dist
+tmp
+.cursor
+.vscode
+.DS_Store
