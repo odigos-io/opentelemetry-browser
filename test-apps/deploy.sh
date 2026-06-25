@@ -15,7 +15,7 @@ for entry in "${apps[@]}"; do
   IFS=":" read -r name dir image tag <<<"$entry"
   full="${image}:${tag}"
   echo "==> Building ${full}"
-  docker build -t "${full}" "${SCRIPT_DIR}/${dir}-app"
+  docker build -t "${full}" "${SCRIPT_DIR}/${dir}"
   echo "==> Loading ${full} into kind cluster '${CLUSTER}'"
   kind load docker-image "${full}" --name "${CLUSTER}"
 done
