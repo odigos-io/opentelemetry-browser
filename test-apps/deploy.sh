@@ -9,6 +9,8 @@ apps=(
   "react:react-app:browser-otel-react:dev"
   "vue:vue-app:browser-otel-vue:dev"
   "angular:angular-app:browser-otel-angular:dev"
+  "backend-1:backend-1:browser-otel-backend-1:dev"
+  "backend-2:backend-2:browser-otel-backend-2:dev"
 )
 
 for entry in "${apps[@]}"; do
@@ -22,9 +24,14 @@ done
 
 echo "==> Applying manifests"
 kubectl create namespace test-apps || true
+# Apply the backends first so their Services (and thus cluster DNS) exist before the app nginx
+# pods start and resolve the backend-1 upstream in their /api/ proxy_pass.
+kubectl apply -f "${SCRIPT_DIR}/k8s/backends.yaml"
 kubectl apply -f "${SCRIPT_DIR}/k8s/"
 
 echo "==> Waiting for rollouts"
+kubectl rollout status deploy/backend-2 -n test-apps --timeout=120s
+kubectl rollout status deploy/backend-1 -n test-apps --timeout=120s
 kubectl rollout status deploy/react-app -n test-apps --timeout=120s
 kubectl rollout status deploy/vue-app -n test-apps --timeout=120s
 kubectl rollout status deploy/angular-app -n test-apps --timeout=120s

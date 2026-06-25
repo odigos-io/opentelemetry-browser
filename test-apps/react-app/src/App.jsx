@@ -37,6 +37,17 @@ export default function App() {
     }
   }, [append])
 
+  const backendChain = useCallback(async () => {
+    append('backend chain GET /api/chain ...')
+    try {
+      const res = await fetch('/api/chain')
+      const data = await res.json()
+      append(`backend chain ok: ${data.service} -> ${data.downstream?.service}`)
+    } catch (e) {
+      append(`backend chain error: ${e.message}`)
+    }
+  }, [append])
+
   const xhrGet = useCallback(() => {
     append('XHR GET /users/1 ...')
     const xhr = new XMLHttpRequest()
@@ -58,13 +69,14 @@ export default function App() {
       <header>
         <span className="badge react">React</span>
         <h1>Browser OpenTelemetry Test Subject</h1>
-        <p>Click buttons to generate document-load, fetch, XHR, and user-interaction spans.</p>
+        <p>Click buttons to generate document-load, fetch, XHR, user-interaction, and backend-chain (browser -&gt; backend-1 -&gt; backend-2) spans.</p>
       </header>
 
       <section className="actions">
         <button onClick={fetchGet}>fetch GET</button>
         <button onClick={fetchPost}>fetch POST</button>
         <button onClick={xhrGet}>XHR GET</button>
+        <button onClick={backendChain}>backend chain</button>
         <button onClick={() => { setCount((c) => c + 1); append(`counter -> ${count + 1}`) }}>
           counter: {count}
         </button>

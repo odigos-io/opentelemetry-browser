@@ -7,8 +7,26 @@ Each app serves plain HTML (so the `odigos-browser-proxy` sidecar can inject the
 - **fetch** — `fetch GET` and `fetch POST` buttons
 - **XHR** — `XHR GET` button
 - **user interaction** — every button click
+- **backend chain** — `backend chain` button (distributed trace across three services)
 
-The outbound calls hit `https://jsonplaceholder.typicode.com` from the end user's browser, so they work without any in-cluster networking.
+The `fetch`/`XHR` buttons hit `https://jsonplaceholder.typicode.com` directly from the end user's browser, so they work without any in-cluster networking.
+
+## Distributed trace (browser → backend-1 → backend-2)
+
+The **backend chain** button issues a **same-origin** `fetch('/api/chain')`. Each app's nginx proxies
+`/api/` to `backend-1` (a standalone Node service), which in turn calls `backend-2`:
+
+```
+browser app  --(fetch /api/chain, same-origin via nginx)-->  backend-1  --(GET /work)-->  backend-2
+```
+
+Because the call is same-origin, the browser OpenTelemetry SDK propagates trace context
+(`traceparent`) on the request. Odigos server-side auto-instrumentation on the two Node backends
+(opted in via their `Source` CRs in `k8s/backends.yaml`) continues that trace. The result is a
+**single trace in Jaeger spanning three services**: the browser app, `backend-1`, and `backend-2`.
+
+> The backends are dependency-free Node `http` servers — Odigos auto-instruments the built-in
+> `http` module, so no app-side OpenTelemetry code is required.
 
 ## Layout
 
@@ -17,7 +35,9 @@ test-apps/
   react-app/      # Vite + React
   vue-app/        # Vite + Vue 3
   angular-app/    # Angular 18 (standalone, application builder)
-  k8s/            # Deployment + Service per app (test-apps namespace)
+  backend-1/      # standalone Node http server; calls backend-2
+  backend-2/      # standalone Node http server; leaf of the chain
+  k8s/            # Deployment + Service per app, plus backends.yaml (Deployments + Services + Sources)
   deploy.sh       # build images -> kind load -> kubectl apply
 ```
 

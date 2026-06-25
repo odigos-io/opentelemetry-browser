@@ -12,13 +12,14 @@ const API = 'https://jsonplaceholder.typicode.com'
       <header>
         <span class="badge angular">Angular</span>
         <h1>Browser OpenTelemetry Test Subject</h1>
-        <p>Click buttons to generate document-load, fetch, XHR, and user-interaction spans.</p>
+        <p>Click buttons to generate document-load, fetch, XHR, user-interaction, and backend-chain (browser -&gt; backend-1 -&gt; backend-2) spans.</p>
       </header>
 
       <section class="actions">
         <button (click)="fetchGet()">fetch GET</button>
         <button (click)="fetchPost()">fetch POST</button>
         <button (click)="xhrGet()">XHR GET</button>
+        <button (click)="backendChain()">backend chain</button>
         <button (click)="bump()">counter: {{ count }}</button>
       </section>
 
@@ -64,6 +65,17 @@ export class AppComponent {
       this.append(`fetch POST ok: created id ${data.id}`)
     } catch (e) {
       this.append(`fetch POST error: ${(e as Error).message}`)
+    }
+  }
+
+  async backendChain(): Promise<void> {
+    this.append('backend chain GET /api/chain ...')
+    try {
+      const res = await fetch('/api/chain')
+      const data = await res.json()
+      this.append(`backend chain ok: ${data.service} -> ${data.downstream?.service}`)
+    } catch (e) {
+      this.append(`backend chain error: ${(e as Error).message}`)
     }
   }
 

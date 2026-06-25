@@ -36,6 +36,17 @@ async function fetchPost() {
   }
 }
 
+async function backendChain() {
+  append('backend chain GET /api/chain ...')
+  try {
+    const res = await fetch('/api/chain')
+    const data = await res.json()
+    append(`backend chain ok: ${data.service} -> ${data.downstream?.service}`)
+  } catch (e) {
+    append(`backend chain error: ${e.message}`)
+  }
+}
+
 function xhrGet() {
   append('XHR GET /users/1 ...')
   const xhr = new XMLHttpRequest()
@@ -63,13 +74,14 @@ function bump() {
     <header>
       <span class="badge vue">Vue</span>
       <h1>Browser OpenTelemetry Test Subject</h1>
-      <p>Click buttons to generate document-load, fetch, XHR, and user-interaction spans.</p>
+      <p>Click buttons to generate document-load, fetch, XHR, user-interaction, and backend-chain (browser -&gt; backend-1 -&gt; backend-2) spans.</p>
     </header>
 
     <section class="actions">
       <button @click="fetchGet">fetch GET</button>
       <button @click="fetchPost">fetch POST</button>
       <button @click="xhrGet">XHR GET</button>
+      <button @click="backendChain">backend chain</button>
       <button @click="bump">counter: {{ count }}</button>
     </section>
 

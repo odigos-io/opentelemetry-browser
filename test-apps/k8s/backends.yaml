@@ -1,0 +1,133 @@
+# Two standalone backends used to produce a multi-service distributed trace:
+#
+#   browser app  --(same-origin /api/chain, via nginx)-->  backend-1  --(/work)-->  backend-2
+#
+# The browser SDK propagates trace context on the same-origin /api/chain call; Odigos server-side
+# auto-instrumentation on the Node backends continues that trace, so a single trace in Jaeger spans
+# three services: the browser app, backend-1, and backend-2.
+#
+# The Source CRs opt both backends into Odigos auto-instrumentation (server-side, Node.js).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-1
+  namespace: test-apps
+  labels:
+    app: backend-1
+    browser-otel-test: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend-1
+  template:
+    metadata:
+      labels:
+        app: backend-1
+        browser-otel-test: "true"
+    spec:
+      containers:
+        - name: backend-1
+          image: browser-otel-backend-1:dev
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PORT
+              value: "3001"
+            - name: BACKEND2_URL
+              value: "http://backend-2.test-apps.svc.cluster.local:3002/work"
+          ports:
+            - containerPort: 3001
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 3001
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-1
+  namespace: test-apps
+  labels:
+    app: backend-1
+spec:
+  selector:
+    app: backend-1
+  ports:
+    - name: http
+      port: 3001
+      targetPort: 3001
+---
+apiVersion: odigos.io/v1alpha1
+kind: Source
+metadata:
+  name: backend-1-source
+  namespace: test-apps
+spec:
+  workload:
+    name: backend-1
+    namespace: test-apps
+    kind: Deployment
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-2
+  namespace: test-apps
+  labels:
+    app: backend-2
+    browser-otel-test: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend-2
+  template:
+    metadata:
+      labels:
+        app: backend-2
+        browser-otel-test: "true"
+    spec:
+      containers:
+        - name: backend-2
+          image: browser-otel-backend-2:dev
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PORT
+              value: "3002"
+          ports:
+            - containerPort: 3002
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 3002
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-2
+  namespace: test-apps
+  labels:
+    app: backend-2
+spec:
+  selector:
+    app: backend-2
+  ports:
+    - name: http
+      port: 3002
+      targetPort: 3002
+---
+apiVersion: odigos.io/v1alpha1
+kind: Source
+metadata:
+  name: backend-2-source
+  namespace: test-apps
+spec:
+  workload:
+    name: backend-2
+    namespace: test-apps
+    kind: Deployment
