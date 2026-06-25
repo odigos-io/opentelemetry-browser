@@ -1,17 +1,14 @@
 # Browser instrumentation test apps
 
-Three minimal single-page apps — **React**, **Vue**, and **Angular** — used as test
-subjects for the Odigos [browser OpenTelemetry agent](../README.md). Each app serves
-plain HTML (so the `odigos-browser-proxy` sidecar can inject the `agent.js` `<script>`)
-and exposes buttons that generate the signals the web auto-instrumentations capture:
+Three minimal single-page apps — **React**, **Vue**, and **Angular** — used as test subjects for the Odigos [browser OpenTelemetry agent](../README.md).
+Each app serves plain HTML (so the `odigos-browser-proxy` sidecar can inject the `agent.js` `<script>`) and exposes buttons that generate the signals the web auto-instrumentations capture:
 
 - **document load** — emitted automatically on page load
 - **fetch** — `fetch GET` and `fetch POST` buttons
 - **XHR** — `XHR GET` button
 - **user interaction** — every button click
 
-The outbound calls hit `https://jsonplaceholder.typicode.com` from the end user's
-browser, so they work without any in-cluster networking.
+The outbound calls hit `https://jsonplaceholder.typicode.com` from the end user's browser, so they work without any in-cluster networking.
 
 ## Layout
 
@@ -20,7 +17,7 @@ test-apps/
   react-app/      # Vite + React
   vue-app/        # Vite + Vue 3
   angular-app/    # Angular 18 (standalone, application builder)
-  k8s/            # Deployment + Service per app (default namespace)
+  k8s/            # Deployment + Service per app (test-apps namespace)
   deploy.sh       # build images -> kind load -> kubectl apply
 ```
 
@@ -32,8 +29,7 @@ Each app builds to static files via a multi-stage Dockerfile and is served by ng
 ./deploy.sh
 ```
 
-This builds `browser-otel-{react,vue,angular}:dev`, loads them into the `kind`
-cluster, and applies the manifests to the `default` namespace.
+This builds `browser-otel-{react,vue,angular}:dev`, loads them into the `kind` cluster, and applies the manifests to the `test-apps` namespace.
 
 ## Open the apps
 

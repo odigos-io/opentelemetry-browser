@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Builds the three browser-instrumentation test apps as Docker images, loads them
-# into the local kind cluster, and deploys them to the default namespace.
+# Builds the three browser-instrumentation test apps as Docker images, loads them into the local kind cluster, and deploys them to the test-apps namespace.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -22,15 +21,16 @@ for entry in "${apps[@]}"; do
 done
 
 echo "==> Applying manifests"
+kubectl create namespace test-apps || true
 kubectl apply -f "${SCRIPT_DIR}/k8s/"
 
 echo "==> Waiting for rollouts"
-kubectl rollout status deploy/react-app -n default --timeout=120s
-kubectl rollout status deploy/vue-app -n default --timeout=120s
-kubectl rollout status deploy/angular-app -n default --timeout=120s
+kubectl rollout status deploy/react-app -n test-apps --timeout=120s
+kubectl rollout status deploy/vue-app -n test-apps --timeout=120s
+kubectl rollout status deploy/angular-app -n test-apps --timeout=120s
 
 echo
-echo "All apps deployed to the default namespace. Port-forward to open them:"
+echo "All apps deployed to the test-apps namespace. Port-forward to open them:"
 echo "  kubectl port-forward svc/react-app   8081:80   # http://localhost:8081"
 echo "  kubectl port-forward svc/vue-app     8082:80   # http://localhost:8082"
 echo "  kubectl port-forward svc/angular-app 8083:80   # http://localhost:8083"
