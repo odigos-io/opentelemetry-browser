@@ -40,6 +40,7 @@ jobs:
       create_branch: ${{ steps.calc.outputs.create_branch }}
       release_branch: ${{ steps.calc.outputs.release_branch }}
       is_prerelease: ${{ steps.meta.outputs.is_prerelease }}
+      previous_tag: ${{ steps.meta.outputs.previous_tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,11 +59,20 @@ jobs:
         id: meta
         env:
           NEW_VERSION: ${{ steps.calc.outputs.new_version }}
+          CURRENT_VERSION: ${{ steps.calc.outputs.current_version }}
         run: |
           if [[ "${NEW_VERSION}" == *"-pre."* || "${NEW_VERSION}" == *"-rc."* ]]; then
             echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
           else
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          # On the first release there is no real previous tag (calculate emits
+          # the synthetic v0.0.0 baseline). Passing it to GitHub's generate-notes
+          # API as previous_tag_name fails with HTTP 400, so leave it empty.
+          if [[ "${CURRENT_VERSION}" == "v0.0.0" ]]; then
+            echo "previous_tag=" >> "$GITHUB_OUTPUT"
+          else
+            echo "previous_tag=${CURRENT_VERSION}" >> "$GITHUB_OUTPUT"
           fi
 
   # ── 2. Build image (no push) to validate before tagging ──────────────────
@@ -122,7 +132,7 @@ jobs:
           base_branch: ${{ inputs.base_branch }}
           sts_identity: tag-releaser
           new_version: ${{ needs.calculate.outputs.new_version }}
-          previous_version: ${{ needs.calculate.outputs.current_version }}
+          previous_version: ${{ needs.calculate.outputs.previous_tag }}
           create_branch: ${{ needs.calculate.outputs.create_branch }}
           release_branch: ${{ needs.calculate.outputs.release_branch }}
           actor: ${{ github.actor }}
@@ -150,7 +160,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-ecr-upload
-          aws-region: 'us-east-1'
+          aws-region: "us-east-1"
 
       - name: Log in to Amazon ECR
         run: |
