@@ -12,6 +12,19 @@ inside the pod. It runs in the **end user's browser**. Odigos delivers it by inj
 the browser's OTLP/HTTP telemetry back to the node-local collector (same-origin, so no CORS or
 public ingress is required).
 
+## Architecture
+
+```mermaid
+flowchart TD
+    User["End-user browser"] -->|"GET / (HTML)"| SC["odigos-browser-proxy sidecar"]
+    SC -->|"forward"| App["web server container<br/>(nginx/serve/etc)"]
+    App -->|"HTML response"| SC
+    SC -->|"inject script tag + recompress"| User
+    User -->|"GET /__odigos/agent.js"| SC
+    User -->|"POST /__odigos/v1/traces (OTLP)"| SC
+    SC -->|"forward + CORS"| NC["node-local collector :4318"]
+```
+
 ## What the bundle does
 
 On load, `agent.js`:
@@ -23,14 +36,14 @@ On load, `agent.js`:
 
 ### Configuration contract (`window.__ODIGOS__`)
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `serviceName` | string | page hostname | `service.name` resource attribute. |
-| `tracesPath` | string | `/__odigos/v1/traces` | Same-origin OTLP/HTTP traces endpoint exposed by the sidecar. |
-| `resourceAttributes` | object | `{}` | Extra resource attributes (e.g. `k8s.namespace.name`). |
-| `propagateTraceHeaderCorsUrls` | string[] | same-origin | URLs that may receive trace-context headers. Wrap a value in `/.../` for a regex. |
-| `samplingRatio` | number | `1` | Head sampling ratio in `[0, 1]`. |
-| `debug` | boolean | `false` | Log diagnostics to the browser console. |
+| Field                          | Type     | Default               | Description                                                                       |
+| ------------------------------ | -------- | --------------------- | --------------------------------------------------------------------------------- |
+| `serviceName`                  | string   | page hostname         | `service.name` resource attribute.                                                |
+| `tracesPath`                   | string   | `/__odigos/v1/traces` | Same-origin OTLP/HTTP traces endpoint exposed by the sidecar.                     |
+| `resourceAttributes`           | object   | `{}`                  | Extra resource attributes (e.g. `k8s.namespace.name`).                            |
+| `propagateTraceHeaderCorsUrls` | string[] | same-origin           | URLs that may receive trace-context headers. Wrap a value in `/.../` for a regex. |
+| `samplingRatio`                | number   | `1`                   | Head sampling ratio in `[0, 1]`.                                                  |
+| `debug`                        | boolean  | `false`               | Log diagnostics to the browser console.                                           |
 
 See [`src/config.ts`](src/config.ts).
 
