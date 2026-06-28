@@ -1,0 +1,13 @@
+{
+  "name": "nuxt-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "node .output/server/index.mjs"
+  },
+  "devDependencies": {
+    "nuxt": "^3.13.0"
+  }
+}

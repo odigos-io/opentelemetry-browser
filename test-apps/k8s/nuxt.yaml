@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nuxt-app
+  namespace: test-apps
+  labels:
+    app: nuxt-app
+    browser-otel-test: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nuxt-app
+  template:
+    metadata:
+      labels:
+        app: nuxt-app
+        browser-otel-test: "true"
+    spec:
+      containers:
+        - name: nuxt-app
+          image: browser-otel-nuxt:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nuxt-app
+  namespace: test-apps
+  labels:
+    app: nuxt-app
+spec:
+  selector:
+    app: nuxt-app
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+---
+# Opt the SSR app into Odigos browser instrumentation. The browser language override makes Odigos
+# inject the odigos-browser-proxy sidecar (which serves agent.js and injects the <script> into the
+# server-rendered HTML) instead of in-process Node instrumentation.
+apiVersion: odigos.io/v1alpha1
+kind: Source
+metadata:
+  name: nuxt-app-source
+  namespace: test-apps
+spec:
+  containerOverrides:
+    - containerName: nuxt-app
+      runtimeInfo:
+        containerName: nuxt-app
+        language: browser
+  workload:
+    kind: Deployment
+    name: nuxt-app
+    namespace: test-apps
