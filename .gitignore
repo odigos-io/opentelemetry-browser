@@ -1,6 +1,12 @@
 node_modules
 dist
+build
 tmp
+.angular
+.next
+.nuxt
+.output
+.svelte-kit
 .cursor
 .vscode
 .DS_Store

@@ -1,0 +1,116 @@
+name: Browser Agent Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Build the agent once, then fan out across every framework x browser combination. Each job serves
+# one framework test-app behind a harness that injects the agent and forwards the browser's OTLP
+# traces to a collector, then asserts the collector received traces with the expected service.name.
+jobs:
+  e2e:
+    name: ${{ matrix.framework }} / ${{ matrix.browser }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Client-side SPAs and server-side-rendered frameworks.
+        framework: [react, vue, angular, next, nuxt, sveltekit]
+        # Headless engines: Chrome(ium), Firefox, and WebKit (Safari).
+        browser: [chromium, firefox, webkit]
+
+    env:
+      SERVICE_NAME: browser-${{ matrix.framework }}-${{ matrix.browser }}
+      OTEL_HTTP_ENDPOINT: http://localhost:4318
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build agent bundle
+        run: |
+          npm install
+          npm run build
+          test -f dist/agent.js && echo "✅ dist/agent.js built"
+
+      - name: Start OpenTelemetry Collector
+        run: |
+          docker run -d --name otel-collector \
+            -p 4317:4317 -p 4318:4318 \
+            -v "$PWD/e2e/collector-config.yaml:/etc/otelcol/config.yaml" \
+            otel/opentelemetry-collector:latest \
+            --config /etc/otelcol/config.yaml
+
+      - name: Wait for collector to be ready
+        run: |
+          for i in $(seq 1 30); do
+            LOGS=$(docker logs otel-collector 2>&1 || true)
+            if echo "$LOGS" | grep -q "Everything is ready"; then
+              echo "✅ Collector is ready"
+              exit 0
+            fi
+            echo "Attempt $i/30: waiting for collector..."
+            sleep 2
+          done
+          echo "❌ Collector did not become ready"
+          docker logs otel-collector || true
+          exit 1
+
+      - name: Resolve app directory
+        id: app
+        run: |
+          case "${{ matrix.framework }}" in
+            react)     DIR=test-apps/react-app ;;
+            vue)       DIR=test-apps/vue-app ;;
+            angular)   DIR=test-apps/angular-app ;;
+            next)      DIR=test-apps/next-app ;;
+            nuxt)      DIR=test-apps/nuxt-app ;;
+            sveltekit) DIR=test-apps/sveltekit-app ;;
+            *) echo "unknown framework ${{ matrix.framework }}"; exit 1 ;;
+          esac
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Build test-app (${{ matrix.framework }})
+        working-directory: ${{ steps.app.outputs.dir }}
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          npm run build
+
+      - name: Install e2e dependencies
+        working-directory: e2e
+        run: npm install
+
+      - name: Install Playwright browser (${{ matrix.browser }})
+        working-directory: e2e
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Run browser e2e (${{ matrix.framework }} / ${{ matrix.browser }})
+        working-directory: e2e
+        run: node run.mjs --framework ${{ matrix.framework }} --browser ${{ matrix.browser }}
+
+      - name: Verify traces reached the collector
+        run: |
+          # Give the collector a moment to log the last batch.
+          sleep 3
+          LOGS=$(docker logs otel-collector 2>&1 || true)
+          SPAN_ATTRIBUTE="service.name: Str(${SERVICE_NAME})"
+          if echo "$LOGS" | grep -q "$SPAN_ATTRIBUTE"; then
+            echo "✅ Traces detected in collector for ${SERVICE_NAME}"
+            echo "$LOGS" | grep -A6 "$SPAN_ATTRIBUTE" | head -40
+          else
+            echo "❌ No traces found in collector for ${SERVICE_NAME}"
+            echo "=== collector logs (tail) ==="
+            echo "$LOGS" | tail -120
+            exit 1
+          fi
+
+      - name: Collector logs on failure
+        if: failure()
+        run: docker logs otel-collector 2>&1 | tail -200 || true

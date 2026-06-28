@@ -1,0 +1,13 @@
+{
+  "name": "@odigos/opentelemetry-browser-e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "End-to-end tests that drive the built browser agent against every supported client- and server-side framework in real (headless) browsers.",
+  "scripts": {
+    "test": "node run.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.48.0"
+  }
+}
