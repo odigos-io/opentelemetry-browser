@@ -1,0 +1,33 @@
+name: Container Image Vulnerability Scan
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  scan-images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Create image tag
+        run: echo "IMAGE_TAG=opentelemetry-browser:${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: build local container
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: release.Dockerfile
+          tags: ${{ env.IMAGE_TAG }}
+          push: false
+          load: true
+
+      - uses: odigos-io/ci-core/vulnerabilities-scanner@main
+        with:
+          image: ${{ env.IMAGE_TAG }}
