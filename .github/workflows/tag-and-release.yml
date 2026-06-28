@@ -198,11 +198,12 @@ jobs:
           failure-description: "ERROR: Failed to publish a new release of OpenTelemetry Browser Community Agent"
           tag: ${{ needs.calculate.outputs.new_version }}
 
-  # ── 6. Trigger Odigos version update (OSS, Enterprise) ───────────────────
-  # Opens auto-merge PRs in the consumer repos bumping the browser-community agent version in their
-  # odiglet Dockerfiles. Unlike the server-side agents (php/ruby), the browser agent runs in the
-  # end-user's browser and is delivered via the odiglet agents image + odigos-browser-proxy sidecar,
-  # so it is not consumed by vm-agent — only odigos (OSS) and odigos-enterprise track it.
+  # ── 6. Trigger agent version update in consumer repos ────────────────────
+  # Opens auto-merge PRs in the consumer repos bumping the browser-community agent version.
+  # The browser agent runs in the end-user's browser rather than attaching to a process:
+  # odigos (OSS) and odigos-enterprise deliver it via the odiglet agents image + the
+  # odigos-browser-proxy sidecar, while vm-agent bundles it under /instrumentations/browser
+  # to be served by its browser proxy.
   trigger-odigos-update:
     needs: [calculate, publish]
     runs-on: ubuntu-latest
@@ -218,3 +219,4 @@ jobs:
           consumers: |
             odigos
             odigos-enterprise
+            vm-agent
