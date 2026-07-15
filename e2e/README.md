@@ -16,7 +16,8 @@ Playwright (chromium | firefox | webkit, headless)
         ▼
    harness.mjs  ── injects agent.js + window.__ODIGOS__ into the app's HTML
         │      ── serves /__otel/agent.js (the built bundle)
-        │      ── receives the browser's OTLP/HTTP traces on /__otel/v1/traces
+        │      ── receives OTLP/HTTP traces on /__otel/v1/traces
+        │      ── receives OTLP/HTTP logs on /__otel/v1/logs
         │                         │
         │                         └──▶ OpenTelemetry Collector (debug exporter)
         ▼

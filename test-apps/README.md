@@ -10,12 +10,13 @@ In both flavors the `odigos-browser-proxy` sidecar injects the `agent.js` `<scri
 served HTML — the proxy injects into any `text/html` response, so it does not matter whether the
 HTML comes from nginx (static) or a framework's SSR server.
 
-Each app exposes buttons that generate the signals the web auto-instrumentations capture:
+Each app exposes buttons that generate the signals the browser agent captures:
 
-- **document load** — emitted automatically on page load
-- **fetch** — `fetch GET` and `fetch POST` buttons
-- **XHR** — `XHR GET` button
-- **user interaction** — every button click
+- **document load** — emitted automatically on page load (span)
+- **fetch** — `fetch GET` and `fetch POST` buttons (span; transitional package)
+- **XHR** — `XHR GET` button (span; transitional package)
+- **user action** — every button click (event via `@opentelemetry/browser-instrumentation`)
+- **navigation / timing / web vitals / errors** — event-based browser instrumentations
 - **backend chain** — `backend chain` button (distributed trace across three services)
 
 The `fetch`/`XHR` buttons hit `https://jsonplaceholder.typicode.com` directly from the end user's browser, so they work without any in-cluster networking.

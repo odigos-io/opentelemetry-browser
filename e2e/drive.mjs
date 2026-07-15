@@ -1,7 +1,7 @@
-// Drives a single browser against the harness URL: loads the page (→ document-load span), waits for
-// the agent to initialize, then generates same-origin activity (fetch + a user-interaction click)
-// so the fetch and user-interaction instrumentations emit spans too. The caller waits for those
-// spans to be exported by polling the harness stats.
+// Drives a single browser against the harness URL: loads the page (→ document-load span + browser
+// events), waits for the agent to initialize, then generates same-origin activity (fetch + click)
+// so fetch spans and user-action events are emitted. The caller waits for traces to be exported
+// by polling the harness stats.
 import { chromium, firefox, webkit } from 'playwright'
 
 const ENGINES = { chromium, firefox, webkit }
@@ -37,9 +37,8 @@ export async function launchAndGenerate({ browserName, url, log = console.log })
     }
   })
 
-  // User-interaction span: append our own probe button and click it, rather than the app's buttons
-  // (which call external services or in-cluster backends that don't exist in CI). The web
-  // auto-instrumentation patches addEventListener globally, so this synthetic listener is traced.
+  // User-action / fetch activity: append our own probe button and click it, rather than the app's
+  // buttons (which call external services or in-cluster backends that don't exist in CI).
   await page.evaluate(() => {
     const b = document.createElement('button')
     b.id = '__otel_probe__'
