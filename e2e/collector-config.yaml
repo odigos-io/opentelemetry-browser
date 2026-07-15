@@ -1,5 +1,5 @@
 # Minimal OpenTelemetry Collector config for e2e tests: accept OTLP over gRPC/HTTP and log every
-# span with full detail so the workflow can assert traces arrived (grep for service.name).
+# span/log with full detail so the workflow can assert telemetry arrived (grep for service.name).
 receivers:
   otlp:
     protocols:
@@ -19,6 +19,10 @@ exporters:
 service:
   pipelines:
     traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    logs:
       receivers: [otlp]
       processors: [batch]
       exporters: [debug]

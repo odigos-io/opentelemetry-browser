@@ -7,7 +7,8 @@
 //
 //   browser ─▶ harness ─▶ test-app (static files or an SSR server)
 //                  │
-//                  └─(POST /__otel/v1/traces)─▶ OpenTelemetry Collector (OTLP/HTTP)
+//                  ├─(POST /__otel/v1/traces)─▶ OpenTelemetry Collector (OTLP/HTTP)
+//                  └─(POST /__otel/v1/logs)───▶ OpenTelemetry Collector (OTLP/HTTP)
 //
 // It supports two ways of serving the app:
 //   - static: serve a built SPA directory (React/Vue/Angular `dist`) with SPA fallback.
@@ -23,6 +24,7 @@ import { Readable } from 'node:stream'
 // Reserved, same-origin paths the harness owns (mirrors the proxy's /__odigos/ prefix).
 export const AGENT_JS_PATH = '/__otel/agent.js'
 export const TRACES_PATH = '/__otel/v1/traces'
+export const LOGS_PATH = '/__otel/v1/logs'
 export const WORK_PATH = '/__otel/work'
 export const STATS_PATH = '/__otel/stats'
 
@@ -59,6 +61,7 @@ function buildSnippet(serviceName) {
   const config = {
     serviceName,
     tracesPath: TRACES_PATH,
+    logsPath: LOGS_PATH,
     samplingRatio: 1,
   }
   return (
@@ -95,20 +98,26 @@ export function startHarness({
   upstream,
 }) {
   const snippet = buildSnippet(serviceName)
-  const stats = { traceRequests: 0, spansForwarded: 0, forwardErrors: 0 }
+  const stats = {
+    traceRequests: 0,
+    spansForwarded: 0,
+    logRequests: 0,
+    logsForwarded: 0,
+    forwardErrors: 0,
+  }
 
-  async function forwardOTLP(req, res) {
+  async function forwardOTLP(req, res, { collectorPath, requestKey, forwardKey }) {
     const chunks = []
     for await (const c of req) chunks.push(c)
     const body = Buffer.concat(chunks)
-    stats.traceRequests += 1
+    stats[requestKey] += 1
     try {
-      const upstreamRes = await fetch(`${otelHttpEndpoint}${TRACES_PATH.replace('/__otel', '')}`, {
+      const upstreamRes = await fetch(`${otelHttpEndpoint}${collectorPath}`, {
         method: 'POST',
         headers: { 'content-type': req.headers['content-type'] || 'application/json' },
         body,
       })
-      stats.spansForwarded += 1
+      stats[forwardKey] += 1
       // Echo the collector's status so the browser exporter sees success/failure faithfully.
       res.writeHead(upstreamRes.status, { 'content-type': 'application/json' })
       res.end('{}')
@@ -233,7 +242,20 @@ export function startHarness({
       const path = (req.url || '/').split('?')[0]
 
       if (path === AGENT_JS_PATH) return await serveAgent(res)
-      if (path === TRACES_PATH && req.method === 'POST') return await forwardOTLP(req, res)
+      if (path === TRACES_PATH && req.method === 'POST') {
+        return await forwardOTLP(req, res, {
+          collectorPath: '/v1/traces',
+          requestKey: 'traceRequests',
+          forwardKey: 'spansForwarded',
+        })
+      }
+      if (path === LOGS_PATH && req.method === 'POST') {
+        return await forwardOTLP(req, res, {
+          collectorPath: '/v1/logs',
+          requestKey: 'logRequests',
+          forwardKey: 'logsForwarded',
+        })
+      }
       if (path === WORK_PATH) {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ ok: true, at: Date.now() }))

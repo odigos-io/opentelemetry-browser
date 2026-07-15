@@ -22,6 +22,7 @@ flowchart TD
     SC -->|"inject script tag + recompress"| User
     User -->|"GET /__odigos/agent.js"| SC
     User -->|"POST /__odigos/v1/traces (OTLP)"| SC
+    User -->|"POST /__odigos/v1/logs (OTLP)"| SC
     SC -->|"forward + CORS"| NC["node-local collector :4318"]
 ```
 
@@ -31,8 +32,40 @@ On load, `agent.js`:
 
 1. Reads runtime configuration from `window.__ODIGOS__` (injected by the sidecar before this script).
 2. Initializes a `WebTracerProvider` with W3C trace-context propagation and a `BatchSpanProcessor`.
-3. Exports traces over OTLP/HTTP to the same-origin path served by the sidecar (default `/__odigos/v1/traces`).
-4. Registers the OpenTelemetry web auto-instrumentations (document load, fetch, XHR, user interaction).
+3. Initializes a `LoggerProvider` with a `BatchLogRecordProcessor` for browser events.
+4. Exports traces and logs over OTLP/HTTP to same-origin paths served by the sidecar
+   (defaults `/__odigos/v1/traces` and `/__odigos/v1/logs`).
+5. Registers instrumentations (see below).
+
+### Instrumentation stack
+
+**Primary** — [`@opentelemetry/browser-instrumentation`](https://www.npmjs.com/package/@opentelemetry/browser-instrumentation)
+(event / log-based, upstream browser repo):
+
+| Instrumentation | Signal | Notes |
+| --------------- | ------ | ----- |
+| Errors | log | Uncaught errors + unhandled rejections |
+| Navigation | log | Hard + soft (SPA) navigations |
+| Navigation timing | log | `PerformanceNavigationTiming` |
+| Resource timing | log | Resource performance entries (OTLP export URLs ignored) |
+| User action | log | Clicks (replaces legacy user-interaction spans) |
+| Web vitals | log | LCP, INP, CLS, etc. |
+
+Console instrumentation is **not** enabled by default (noisy; can interact with diag logging).
+
+**Transitional span instrumentations** — kept until upstream
+`@opentelemetry/browser-instrumentation` provides fetch/XHR/document-load parity for
+distributed tracing:
+
+| Package | Signal | Notes |
+| ------- | ------ | ----- |
+| `@opentelemetry/instrumentation-document-load` | span | Page load |
+| `@opentelemetry/instrumentation-fetch` | span | `fetch` + trace-context propagation |
+| `@opentelemetry/instrumentation-xml-http-request` | span | XHR + trace-context propagation |
+
+The legacy `@opentelemetry/auto-instrumentations-web` metapackage has been removed. Once
+upstream fetch instrumentation lands and NetworkContextManager wiring is complete, remove the
+transitional span packages above.
 
 ### Configuration contract (`window.__ODIGOS__`)
 
@@ -40,6 +73,7 @@ On load, `agent.js`:
 | ------------------------------ | -------- | --------------------- | --------------------------------------------------------------------------------- |
 | `serviceName`                  | string   | page hostname         | `service.name` resource attribute.                                                |
 | `tracesPath`                   | string   | `/__odigos/v1/traces` | Same-origin OTLP/HTTP traces endpoint exposed by the sidecar.                     |
+| `logsPath`                     | string   | `/__odigos/v1/logs`   | Same-origin OTLP/HTTP logs/events endpoint exposed by the sidecar.                |
 | `resourceAttributes`           | object   | `{}`                  | Extra resource attributes (e.g. `k8s.namespace.name`).                            |
 | `propagateTraceHeaderCorsUrls` | string[] | same-origin           | URLs that may receive trace-context headers. Wrap a value in `/.../` for a regex. |
 | `samplingRatio`                | number   | `1`                   | Head sampling ratio in `[0, 1]`.                                                  |

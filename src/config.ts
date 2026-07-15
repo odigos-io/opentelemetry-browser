@@ -12,6 +12,9 @@ export interface OdigosBrowserConfig {
   // and forwards them to the node-local collector. Same-origin avoids any CORS configuration.
   tracesPath?: string;
 
+  // Same-origin path for OTLP/HTTP logs/events (browser-instrumentation emits log records).
+  logsPath?: string;
+
   // Additional OpenTelemetry resource attributes (e.g. k8s.namespace.name, k8s.pod.name).
   resourceAttributes?: Record<string, string>;
 
@@ -35,9 +38,10 @@ declare global {
 }
 
 const DEFAULT_TRACES_PATH = '/__odigos/v1/traces';
+const DEFAULT_LOGS_PATH = '/__odigos/v1/logs';
 
 export function resolveConfig(): Required<
-  Pick<OdigosBrowserConfig, 'serviceName' | 'tracesPath' | 'samplingRatio'>
+  Pick<OdigosBrowserConfig, 'serviceName' | 'tracesPath' | 'logsPath' | 'samplingRatio'>
 > &
   OdigosBrowserConfig {
   const raw: OdigosBrowserConfig = (typeof window !== 'undefined' && window.__ODIGOS__) || {};
@@ -52,6 +56,9 @@ export function resolveConfig(): Required<
   const tracesPath =
     raw.tracesPath && raw.tracesPath.trim().length > 0 ? raw.tracesPath : DEFAULT_TRACES_PATH;
 
+  const logsPath =
+    raw.logsPath && raw.logsPath.trim().length > 0 ? raw.logsPath : DEFAULT_LOGS_PATH;
+
   const samplingRatio =
     typeof raw.samplingRatio === 'number' && raw.samplingRatio >= 0 && raw.samplingRatio <= 1
       ? raw.samplingRatio
@@ -61,6 +68,7 @@ export function resolveConfig(): Required<
     ...raw,
     serviceName,
     tracesPath,
+    logsPath,
     samplingRatio,
   };
 }
@@ -82,4 +90,16 @@ export function resolvePropagationTargets(values: string[] | undefined): Array<s
     }
     return value;
   });
+}
+
+// URLs used by this agent to export OTLP — must be ignored by network/resource instrumentations
+// to avoid feedback loops (instrumenting our own telemetry export).
+export function resolveIgnoreUrls(tracesPath: string, logsPath: string): Array<string | RegExp> {
+  const paths = [tracesPath, logsPath].filter(Boolean);
+  const patterns: Array<string | RegExp> = paths.map(
+    (p) => new RegExp(p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+  );
+  // Also match common OTLP path suffixes in case the sidecar uses a different prefix.
+  patterns.push(/\/v1\/traces(?:\?|$)/, /\/v1\/logs(?:\?|$)/);
+  return patterns;
 }
