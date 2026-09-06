@@ -1,19 +1,7 @@
-# e2e harness — a tiny stand-in for the browser gateway, used only in CI/local e2e.
-#
-# In production, the gateway (1) injects external <script> tags into served HTML,
-# (2) serves /__odigos/config.js + agent.js, and (3) receives authenticated browser
-# OTLP/HTTP on a same-origin path and forwards it to the collector.
-#
-#   browser ─▶ harness ─▶ test-app (static files or an SSR server)
-#                  │
-#                  ├─(POST /__otel/v1/traces + Bearer)─▶ OpenTelemetry Collector
-#                  └─(POST /__otel/v1/logs   + Bearer)─▶ OpenTelemetry Collector
-#
-# It supports two ways of serving the app:
-#   - static: serve a built SPA directory (React/Vue/Angular `dist`) with SPA fallback.
-#   - proxy:  reverse-proxy to an already-running SSR server (Next.js/Nuxt/SvelteKit).
-#
-# HTML responses get the agent snippet injected; everything else is passed through untouched.
+// e2e harness — tiny stand-in for the browser gateway (CI/local only).
+//
+// Production gateway: injects external <script> tags, serves config.js + agent.js,
+// and receives authenticated same-origin OTLP/HTTP then forwards to the collector.
 import { createServer } from 'node:http'
 import { randomBytes } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
@@ -21,7 +9,6 @@ import { createReadStream } from 'node:fs'
 import { join, normalize, extname } from 'node:path'
 import { Readable } from 'node:stream'
 
-// Reserved, same-origin paths the harness owns (mirrors the proxy's /__odigos/ prefix).
 export const AGENT_JS_PATH = '/__otel/agent.js'
 export const CONFIG_JS_PATH = '/__otel/config.js'
 export const TRACES_PATH = '/__otel/v1/traces'
@@ -49,15 +36,14 @@ const CONTENT_TYPES = {
   '.txt': 'text/plain; charset=utf-8',
 }
 
-function contentTypeFor(path) {
-  return CONTENT_TYPES[extname(path).toLowerCase()] || 'application/octet-stream'
+function contentTypeFor(filePath) {
+  return CONTENT_TYPES[extname(filePath).toLowerCase()] || 'application/octet-stream'
 }
 
-function isHTML(contentType) {
+function isHtml(contentType) {
   return !!contentType && contentType.toLowerCase().includes('text/html')
 }
 
-// External script tags only — mirrors production CSP-safe injection (no inline JS).
 function buildSnippet() {
   return (
     `<script src="${CONFIG_JS_PATH}"></script>` +
@@ -66,18 +52,16 @@ function buildSnippet() {
 }
 
 function buildConfigJs(serviceName, exportToken) {
-  const config = {
+  return `window.__ODIGOS__=${JSON.stringify({
     serviceName,
     tracesPath: TRACES_PATH,
     logsPath: LOGS_PATH,
     samplingRatio: 1,
     exportToken,
-  }
-  return `window.__ODIGOS__=${JSON.stringify(config)};`
+  })};`
 }
 
-// Inject the snippet at the earliest reasonable anchor (after <head>, else before </head>, etc.).
-function injectIntoHTML(html, snippet) {
+function injectIntoHtml(html, snippet) {
   const lower = html.toLowerCase()
   const headOpen = lower.indexOf('<head')
   if (headOpen >= 0) {
@@ -121,7 +105,7 @@ export function startHarness({
     unauthorized: 0,
   }
 
-  async function forwardOTLP(req, res, { collectorPath, requestKey, forwardKey }) {
+  async function forwardOtlp(req, res, { collectorPath, requestKey, forwardKey }) {
     if (bearerToken(req) !== exportToken) {
       stats.unauthorized += 1
       res.writeHead(401, { 'content-type': 'application/json' })
@@ -140,7 +124,6 @@ export function startHarness({
         body,
       })
       stats[forwardKey] += 1
-      // Echo the collector's status so the browser exporter sees success/failure faithfully.
       res.writeHead(upstreamRes.status, { 'content-type': 'application/json' })
       res.end('{}')
     } catch (err) {
@@ -175,7 +158,6 @@ export function startHarness({
   }
 
   async function serveStatic(reqPath, res) {
-    // Resolve the request path within staticDir; fall back to index.html for SPA routes.
     let rel = decodeURIComponent(reqPath.split('?')[0])
     if (rel === '/' || rel === '') rel = '/index.html'
     const safe = normalize(rel).replace(/^(\.\.[/\\])+/, '')
@@ -186,7 +168,6 @@ export function startHarness({
       filePath = join(filePath, 'index.html')
       info = await stat(filePath).catch(() => null)
     }
-    // SPA fallback: unknown route with no file extension -> index.html.
     if (!info) {
       if (extname(safe)) {
         res.writeHead(404, { 'content-type': 'text/plain' })
@@ -203,9 +184,9 @@ export function startHarness({
     }
 
     const type = contentTypeFor(filePath)
-    if (isHTML(type)) {
+    if (isHtml(type)) {
       const html = await readFile(filePath, 'utf8')
-      const injected = injectIntoHTML(html, snippet)
+      const injected = injectIntoHtml(html, snippet)
       res.writeHead(200, {
         'content-type': type,
         'content-length': Buffer.byteLength(injected),
@@ -225,7 +206,6 @@ export function startHarness({
       if (lk === 'host' || lk === 'connection' || lk === 'content-length') continue
       headers[k] = v
     }
-    // Ask the SSR server for uncompressed HTML so we can inject without decompressing.
     headers['accept-encoding'] = 'identity'
 
     let body
@@ -252,9 +232,9 @@ export function startHarness({
       outHeaders[key] = value
     })
 
-    if (isHTML(type)) {
+    if (isHtml(type)) {
       const html = await upstreamRes.text()
-      const injected = injectIntoHTML(html, snippet)
+      const injected = injectIntoHtml(html, snippet)
       outHeaders['content-length'] = Buffer.byteLength(injected)
       res.writeHead(upstreamRes.status, outHeaders)
       res.end(injected)
@@ -276,14 +256,14 @@ export function startHarness({
       if (path === CONFIG_JS_PATH) return serveConfig(res)
       if (path === AGENT_JS_PATH) return await serveAgent(res)
       if (path === TRACES_PATH && req.method === 'POST') {
-        return await forwardOTLP(req, res, {
+        return await forwardOtlp(req, res, {
           collectorPath: '/v1/traces',
           requestKey: 'traceRequests',
           forwardKey: 'spansForwarded',
         })
       }
       if (path === LOGS_PATH && req.method === 'POST') {
-        return await forwardOTLP(req, res, {
+        return await forwardOtlp(req, res, {
           collectorPath: '/v1/logs',
           requestKey: 'logRequests',
           forwardKey: 'logsForwarded',
