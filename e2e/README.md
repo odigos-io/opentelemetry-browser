@@ -14,10 +14,10 @@ received traces with the expected `service.name`.
 Playwright (chromium | firefox | webkit, headless)
         │  loads the page, generates fetch + click activity
         ▼
-   harness.mjs  ── injects agent.js + window.__ODIGOS__ into the app's HTML
+   harness.mjs  ── injects external config.js + agent.js script tags into HTML
+        │      ── serves /__otel/config.js (window.__ODIGOS__ + exportToken)
         │      ── serves /__otel/agent.js (the built bundle)
-        │      ── receives OTLP/HTTP traces on /__otel/v1/traces
-        │      ── receives OTLP/HTTP logs on /__otel/v1/logs
+        │      ── receives authenticated OTLP/HTTP on /__otel/v1/traces|logs
         │                         │
         │                         └──▶ OpenTelemetry Collector (debug exporter)
         ▼
@@ -25,8 +25,8 @@ Playwright (chromium | firefox | webkit, headless)
 ```
 
 Because there is no Kubernetes (and therefore no `odigos-browser-proxy`) in CI, `harness.mjs` is a
-tiny stand-in that replicates the three things the sidecar does in production: inject the agent into
-HTML, serve the bundle, and forward same-origin OTLP traffic to the collector.
+tiny stand-in that replicates the hardened gateway: CSP-safe script injection, config.js with
+export token, bundle serving, and authenticated same-origin OTLP forwarding to the collector.
 
 ## Files
 
