@@ -7,34 +7,44 @@ agents image (exposed at `/instrumentations/browser/agent.js`, mounted on nodes 
 `/var/odigos/browser`).
 
 Unlike Odigos' server-side agents (PHP, Ruby, Node.js, ...), the browser agent does not run
-inside the pod. It runs in the **end user's browser**. Odigos delivers it by injecting a
-`<script>` tag into HTML responses via the `odigos-browser-proxy` sidecar, which also proxies
-the browser's OTLP/HTTP telemetry back to the node-local collector (same-origin, so no CORS or
-public ingress is required).
+inside the pod. It runs in the **end user's browser**. Odigos delivers it via a **hardened
+same-origin gateway** (`odigos-browser-proxy` on Kubernetes, `BrowserProxyController` on VMs)
+that injects CSP-safe external `<script>` tags into HTML and relays authenticated OTLP/HTTP
+telemetry to the local collector (no public collector ingress required).
+
+## Docs
+
+| Doc | Contents |
+| --- | --- |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Ecosystem map across agent / k8s / enterprise / vm-agent |
+| [docs/DATA_FLOW.md](docs/DATA_FLOW.md) | How config and telemetry move through the system |
+| [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) | Threats that blocked the original design + mitigations |
+| [docs/SECURITY.md](docs/SECURITY.md) | Concrete gateway + agent security controls |
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    User["End-user browser"] -->|"GET / (HTML)"| SC["odigos-browser-proxy sidecar"]
+    User["End-user browser"] -->|"GET / (HTML)"| SC["Browser gateway"]
     SC -->|"forward"| App["web server container<br/>(nginx/serve/etc)"]
     App -->|"HTML response"| SC
-    SC -->|"inject script tag + recompress"| User
+    SC -->|"inject external script tags + recompress"| User
+    User -->|"GET /__odigos/config.js"| SC
     User -->|"GET /__odigos/agent.js"| SC
-    User -->|"POST /__odigos/v1/traces (OTLP)"| SC
-    User -->|"POST /__odigos/v1/logs (OTLP)"| SC
-    SC -->|"forward + CORS"| NC["node-local collector :4318"]
+    User -->|"POST /__odigos/v1/traces\|logs<br/>Bearer exportToken"| SC
+    SC -->|"validate + rate limit + forward"| NC["node-local collector :4318"]
 ```
 
 ## What the bundle does
 
 On load, `agent.js`:
 
-1. Reads runtime configuration from `window.__ODIGOS__` (injected by the sidecar before this script).
+1. Reads runtime configuration from `window.__ODIGOS__` (assigned by `/__odigos/config.js` before this script).
 2. Initializes a `WebTracerProvider` with W3C trace-context propagation and a `BatchSpanProcessor`.
 3. Initializes a `LoggerProvider` with a `BatchLogRecordProcessor` for browser events.
-4. Exports traces and logs over OTLP/HTTP to same-origin paths served by the sidecar
-   (defaults `/__odigos/v1/traces` and `/__odigos/v1/logs`).
+4. Exports traces and logs over OTLP/HTTP to same-origin gateway paths
+   (defaults `/__odigos/v1/traces` and `/__odigos/v1/logs`), attaching `Authorization: Bearer`
+   when `exportToken` is set.
 5. Registers instrumentations (see below).
 
 ### Instrumentation stack
@@ -72,8 +82,9 @@ transitional span packages above.
 | Field                          | Type     | Default               | Description                                                                       |
 | ------------------------------ | -------- | --------------------- | --------------------------------------------------------------------------------- |
 | `serviceName`                  | string   | page hostname         | `service.name` resource attribute.                                                |
-| `tracesPath`                   | string   | `/__odigos/v1/traces` | Same-origin OTLP/HTTP traces endpoint exposed by the sidecar.                     |
-| `logsPath`                     | string   | `/__odigos/v1/logs`   | Same-origin OTLP/HTTP logs/events endpoint exposed by the sidecar.                |
+| `tracesPath`                   | string   | `/__odigos/v1/traces` | Same-origin OTLP/HTTP traces endpoint exposed by the gateway.                     |
+| `logsPath`                     | string   | `/__odigos/v1/logs`   | Same-origin OTLP/HTTP logs/events endpoint exposed by the gateway.                |
+| `exportToken`                  | string   | _(required in prod)_  | Bearer token for OTLP POSTs; minted by the gateway into `config.js`.              |
 | `resourceAttributes`           | object   | `{}`                  | Extra resource attributes (e.g. `k8s.namespace.name`).                            |
 | `propagateTraceHeaderCorsUrls` | string[] | same-origin           | URLs that may receive trace-context headers. Wrap a value in `/.../` for a regex. |
 | `samplingRatio`                | number   | `1`                   | Head sampling ratio in `[0, 1]`.                                                  |

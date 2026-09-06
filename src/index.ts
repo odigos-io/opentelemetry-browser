@@ -22,7 +22,12 @@ import {
   ATTR_SERVICE_NAME,
   ATTR_TELEMETRY_SDK_LANGUAGE,
 } from '@opentelemetry/semantic-conventions';
-import { resolveConfig, resolveIgnoreUrls, resolvePropagationTargets } from './config';
+import {
+  resolveConfig,
+  resolveExportHeaders,
+  resolveIgnoreUrls,
+  resolvePropagationTargets,
+} from './config';
 
 function start(): void {
   // The sidecar may inject the script tag more than once (e.g. for documents that include
@@ -45,11 +50,13 @@ function start(): void {
   });
 
   const ignoreUrls = resolveIgnoreUrls(config.tracesPath, config.logsPath);
+  const exportHeaders = resolveExportHeaders(config.exportToken);
 
   // --- Traces (span-based network + document load; temporary until upstream parity) ---
   const traceExporter = new OTLPTraceExporter({
-    // Same-origin path served by the odigos-browser-proxy sidecar; it forwards to the node collector.
+    // Same-origin path served by the browser gateway; it authenticates and forwards to the collector.
     url: config.tracesPath,
+    headers: exportHeaders,
   });
 
   const tracerProvider = new WebTracerProvider({
@@ -66,6 +73,7 @@ function start(): void {
   // --- Logs / events (@opentelemetry/browser-instrumentation primary stack) ---
   const logExporter = new OTLPLogExporter({
     url: config.logsPath,
+    headers: exportHeaders,
   });
 
   const loggerProvider = new LoggerProvider({
