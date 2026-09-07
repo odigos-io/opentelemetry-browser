@@ -38,12 +38,12 @@ result is a **single trace in Jaeger spanning three services**: the browser app,
 
 How each app exposes the same-origin `/api/` path differs by flavor:
 
-| App         | Server          | `/api/` → backend-1 mechanism                                     |
-| ----------- | --------------- | ----------------------------------------------------------------- |
-| react/vue/angular | nginx     | `location /api/ { proxy_pass ...backend-1... }`                   |
-| next-app    | `next start`    | `next.config.mjs` `rewrites()` (transparent proxy)               |
-| nuxt-app    | Nitro           | `nuxt.config.ts` `routeRules` `{ proxy }`                        |
-| sveltekit-app | adapter-node  | `src/routes/api/[...path]/+server.js` (forwards trace headers)   |
+| App               | Server       | `/api/` → backend-1 mechanism                                  |
+| ----------------- | ------------ | -------------------------------------------------------------- |
+| react/vue/angular | nginx        | `location /api/ { proxy_pass ...backend-1... }`                |
+| next-app          | `next start` | `next.config.mjs` `rewrites()` (transparent proxy)             |
+| nuxt-app          | Nitro        | `nuxt.config.ts` `routeRules` `{ proxy }`                      |
+| sveltekit-app     | adapter-node | `src/routes/api/[...path]/+server.js` (forwards trace headers) |
 
 > The SSR apps run with the **browser** language override (see their `Source` CRs), so Odigos does
 > not server-side instrument the Node process; the app server only proxies `/api/`, forwarding the
@@ -64,23 +64,44 @@ test-apps/
   sveltekit-app/  # SvelteKit           (SSR, adapter-node)
   backend-1/      # standalone Node http server; calls backend-2
   backend-2/      # standalone Node http server; leaf of the chain
-  k8s/            # Deployment + Service per app (+ Source for SSR apps), plus backends.yaml
-  deploy.sh       # build images -> kind load -> kubectl apply
+  k8s.yaml        # all Deployments, Services, and Sources
+  deploy.sh       # build images -> push to Artifact Registry -> kubectl apply
 ```
 
 Static apps build to static files served by nginx; SSR apps build a Node server that renders HTML
 per request. Both use a multi-stage Dockerfile.
 
-## Build & deploy to kind
+## Build & deploy
 
 ```bash
 ./deploy.sh
 ```
 
-This builds `browser-otel-{react,vue,angular,next,nuxt,sveltekit}:dev` plus the two backends, loads
-them into the `kind` cluster, and applies the manifests to the `test-apps` namespace.
+This builds `browser-otel-{react,vue,angular,next,nuxt,sveltekit}:dev` plus the two backends for
+`linux/amd64` and `linux/arm64`, pushes them to `staging-registry.odigos.io`, and applies the
+manifests to the `test-apps` namespace.
 
 ## Open the apps
+
+After deploy, get the shared ALB hostname:
+
+```bash
+kubectl get ingress react-app -n test-apps -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'; echo
+```
+
+Then open (same host, path prefixes):
+
+```text
+http://<alb>/react/
+http://<alb>/vue/
+http://<alb>/angular/
+http://<alb>/next/
+http://<alb>/nuxt/
+http://<alb>/sveltekit/
+http://<alb>/jaeger/
+```
+
+Or port-forward locally:
 
 ```bash
 # Static SPAs (nginx, port 80):
@@ -88,15 +109,15 @@ kubectl port-forward svc/react-app     8081:80     # http://localhost:8081
 kubectl port-forward svc/vue-app       8082:80     # http://localhost:8082
 kubectl port-forward svc/angular-app   8083:80     # http://localhost:8083
 # SSR apps (Node server, port 3000):
-kubectl port-forward svc/next-app      8084:3000   # http://localhost:8084
-kubectl port-forward svc/nuxt-app      8085:3000   # http://localhost:8085
-kubectl port-forward svc/sveltekit-app 8086:3000   # http://localhost:8086
+kubectl port-forward svc/next-app      8084:3000   # http://localhost:8084/next/
+kubectl port-forward svc/nuxt-app      8085:3000   # http://localhost:8085/nuxt/
+kubectl port-forward svc/sveltekit-app 8086:3000   # http://localhost:8086/sveltekit/
 ```
 
 ## Build a single app manually
 
 ```bash
-docker build -t browser-otel-react:dev ./react-app
-kind load docker-image browser-otel-react:dev --name kind
-kubectl apply -f k8s/react.yaml
+IMAGE=staging-registry.odigos.io/browser-otel-react:dev
+docker buildx build --platform linux/amd64,linux/arm64 -t "$IMAGE" --push ./react-app
+kubectl apply -f k8s.yaml
 ```

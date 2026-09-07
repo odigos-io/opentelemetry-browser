@@ -1,0 +1,579 @@
+# All browser-instrumentation test apps and backends for the test-apps namespace.
+#
+# Distributed trace chain:
+#   browser app  --(same-origin /api/chain)-->  backend-1  --(/work)-->  backend-2
+#
+# SSR apps (next/nuxt/sveltekit) use a Source with language: browser so Odigos injects the
+# odigos-browser-proxy sidecar instead of in-process Node instrumentation.
+# Backend Sources opt them into server-side Node auto-instrumentation.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: test-apps
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-1
+  namespace: test-apps
+  labels:
+    app: backend-1
+    browser-otel-test: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend-1
+  template:
+    metadata:
+      labels:
+        app: backend-1
+        browser-otel-test: "true"
+    spec:
+      containers:
+        - name: backend-1
+          image: staging-registry.odigos.io/browser-otel-backend-1:dev
+          imagePullPolicy: Always
+          env:
+            - name: PORT
+              value: "3001"
+            - name: BACKEND2_URL
+              value: "http://backend-2.test-apps.svc.cluster.local:3002/work"
+          ports:
+            - containerPort: 3001
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 3001
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-1
+  namespace: test-apps
+  labels:
+    app: backend-1
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz
+spec:
+  selector:
+    app: backend-1
+  ports:
+    - name: http
+      port: 3001
+      targetPort: 3001
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-2
+  namespace: test-apps
+  labels:
+    app: backend-2
+    browser-otel-test: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend-2
+  template:
+    metadata:
+      labels:
+        app: backend-2
+        browser-otel-test: "true"
+    spec:
+      containers:
+        - name: backend-2
+          image: staging-registry.odigos.io/browser-otel-backend-2:dev
+          imagePullPolicy: Always
+          env:
+            - name: PORT
+              value: "3002"
+          ports:
+            - containerPort: 3002
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 3002
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-2
+  namespace: test-apps
+  labels:
+    app: backend-2
+spec:
+  selector:
+    app: backend-2
+  ports:
+    - name: http
+      port: 3002
+      targetPort: 3002
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: react-app
+  namespace: test-apps
+  labels:
+    app: react-app
+    browser-otel-test: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: react-app
+  template:
+    metadata:
+      labels:
+        app: react-app
+        browser-otel-test: "true"
+    spec:
+      containers:
+        - name: react-app
+          image: staging-registry.odigos.io/browser-otel-react:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: react-app
+  namespace: test-apps
+  labels:
+    app: react-app
+spec:
+  selector:
+    app: react-app
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vue-app
+  namespace: test-apps
+  labels:
+    app: vue-app
+    browser-otel-test: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vue-app
+  template:
+    metadata:
+      labels:
+        app: vue-app
+        browser-otel-test: "true"
+    spec:
+      containers:
+        - name: vue-app
+          image: staging-registry.odigos.io/browser-otel-vue:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vue-app
+  namespace: test-apps
+  labels:
+    app: vue-app
+spec:
+  selector:
+    app: vue-app
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: angular-app
+  namespace: test-apps
+  labels:
+    app: angular-app
+    browser-otel-test: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: angular-app
+  template:
+    metadata:
+      labels:
+        app: angular-app
+        browser-otel-test: "true"
+    spec:
+      containers:
+        - name: angular-app
+          image: staging-registry.odigos.io/browser-otel-angular:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: angular-app
+  namespace: test-apps
+  labels:
+    app: angular-app
+spec:
+  selector:
+    app: angular-app
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: next-app
+  namespace: test-apps
+  labels:
+    app: next-app
+    browser-otel-test: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: next-app
+  template:
+    metadata:
+      labels:
+        app: next-app
+        browser-otel-test: "true"
+    spec:
+      containers:
+        - name: next-app
+          image: staging-registry.odigos.io/browser-otel-next:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /next
+              port: 3000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: next-app
+  namespace: test-apps
+  labels:
+    app: next-app
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: /next
+spec:
+  selector:
+    app: next-app
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nuxt-app
+  namespace: test-apps
+  labels:
+    app: nuxt-app
+    browser-otel-test: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nuxt-app
+  template:
+    metadata:
+      labels:
+        app: nuxt-app
+        browser-otel-test: "true"
+    spec:
+      containers:
+        - name: nuxt-app
+          image: staging-registry.odigos.io/browser-otel-nuxt:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /nuxt/
+              port: 3000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nuxt-app
+  namespace: test-apps
+  labels:
+    app: nuxt-app
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: /nuxt/
+spec:
+  selector:
+    app: nuxt-app
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sveltekit-app
+  namespace: test-apps
+  labels:
+    app: sveltekit-app
+    browser-otel-test: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sveltekit-app
+  template:
+    metadata:
+      labels:
+        app: sveltekit-app
+        browser-otel-test: "true"
+    spec:
+      containers:
+        - name: sveltekit-app
+          image: staging-registry.odigos.io/browser-otel-sveltekit:dev
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /sveltekit
+              port: 3000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sveltekit-app
+  namespace: test-apps
+  labels:
+    app: sveltekit-app
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: /sveltekit
+spec:
+  selector:
+    app: sveltekit-app
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+
+---
+apiVersion: odigos.io/v1alpha1
+kind: Source
+metadata:
+  name: test-apps
+  namespace: test-apps
+spec:
+  workload:
+    kind: Namespace
+    name: test-apps
+    namespace: test-apps
+---
+apiVersion: odigos.io/v1alpha1
+kind: Source
+metadata:
+  name: angular-app
+  namespace: test-apps
+spec:
+  containerOverrides:
+    - containerName: angular-app
+      runtimeInfo:
+        containerName: angular-app
+        language: browser
+  workload:
+    kind: Deployment
+    name: angular-app
+    namespace: test-apps
+---
+apiVersion: odigos.io/v1alpha1
+kind: Source
+metadata:
+  name: next-app
+  namespace: test-apps
+spec:
+  containerOverrides:
+    - containerName: next-app
+      runtimeInfo:
+        containerName: next-app
+        language: browser
+  workload:
+    kind: Deployment
+    name: next-app
+    namespace: test-apps
+---
+apiVersion: odigos.io/v1alpha1
+kind: Source
+metadata:
+  name: nuxt-app
+  namespace: test-apps
+spec:
+  containerOverrides:
+    - containerName: nuxt-app
+      runtimeInfo:
+        containerName: nuxt-app
+        language: browser
+  workload:
+    kind: Deployment
+    name: nuxt-app
+    namespace: test-apps
+---
+apiVersion: odigos.io/v1alpha1
+kind: Source
+metadata:
+  name: react-app
+  namespace: test-apps
+spec:
+  containerOverrides:
+    - containerName: react-app
+      runtimeInfo:
+        containerName: react-app
+        language: browser
+  workload:
+    kind: Deployment
+    name: react-app
+    namespace: test-apps
+---
+apiVersion: odigos.io/v1alpha1
+kind: Source
+metadata:
+  name: sveltekit-app
+  namespace: test-apps
+spec:
+  containerOverrides:
+    - containerName: sveltekit-app
+      runtimeInfo:
+        containerName: sveltekit-app
+        language: browser
+  workload:
+    kind: Deployment
+    name: sveltekit-app
+    namespace: test-apps
+---
+apiVersion: odigos.io/v1alpha1
+kind: Source
+metadata:
+  name: vue-app
+  namespace: test-apps
+spec:
+  containerOverrides:
+    - containerName: vue-app
+      runtimeInfo:
+        containerName: vue-app
+        language: browser
+  workload:
+    kind: Deployment
+    name: vue-app
+    namespace: test-apps
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: browser-test
+  namespace: test-apps
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/backend-protocol-version: HTTP1
+    alb.ingress.kubernetes.io/healthcheck-path: /
+    alb.ingress.kubernetes.io/success-codes: "200"
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /react
+            pathType: Prefix
+            backend:
+              service:
+                name: react-app
+                port:
+                  number: 80
+          - path: /vue
+            pathType: Prefix
+            backend:
+              service:
+                name: vue-app
+                port:
+                  number: 80
+          - path: /angular
+            pathType: Prefix
+            backend:
+              service:
+                name: angular-app
+                port:
+                  number: 80
+          - path: /next
+            pathType: Prefix
+            backend:
+              service:
+                name: next-app
+                port:
+                  number: 3000
+          - path: /nuxt
+            pathType: Prefix
+            backend:
+              service:
+                name: nuxt-app
+                port:
+                  number: 3000
+          - path: /sveltekit
+            pathType: Prefix
+            backend:
+              service:
+                name: sveltekit-app
+                port:
+                  number: 3000
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-1
+                port:
+                  number: 3001

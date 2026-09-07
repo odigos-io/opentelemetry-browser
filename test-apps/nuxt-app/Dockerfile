@@ -2,7 +2,8 @@
 FROM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+# npm ci fails on optional peerDependency conflicts in this lockfile (cac/commander).
+RUN npm install
 COPY . .
 RUN npm run build
 
