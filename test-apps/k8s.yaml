@@ -56,8 +56,6 @@ metadata:
   namespace: test-apps
   labels:
     app: backend-1
-  annotations:
-    alb.ingress.kubernetes.io/healthcheck-path: /healthz
 spec:
   selector:
     app: backend-1
@@ -284,7 +282,7 @@ spec:
             - containerPort: 3000
           readinessProbe:
             httpGet:
-              path: /next
+              path: /
               port: 3000
             initialDelaySeconds: 3
             periodSeconds: 5
@@ -296,8 +294,6 @@ metadata:
   namespace: test-apps
   labels:
     app: next-app
-  annotations:
-    alb.ingress.kubernetes.io/healthcheck-path: /next
 spec:
   selector:
     app: next-app
@@ -333,7 +329,7 @@ spec:
             - containerPort: 3000
           readinessProbe:
             httpGet:
-              path: /nuxt/
+              path: /
               port: 3000
             initialDelaySeconds: 3
             periodSeconds: 5
@@ -345,8 +341,6 @@ metadata:
   namespace: test-apps
   labels:
     app: nuxt-app
-  annotations:
-    alb.ingress.kubernetes.io/healthcheck-path: /nuxt/
 spec:
   selector:
     app: nuxt-app
@@ -382,7 +376,7 @@ spec:
             - containerPort: 3000
           readinessProbe:
             httpGet:
-              path: /sveltekit
+              path: /
               port: 3000
             initialDelaySeconds: 3
             periodSeconds: 5
@@ -394,8 +388,6 @@ metadata:
   namespace: test-apps
   labels:
     app: sveltekit-app
-  annotations:
-    alb.ingress.kubernetes.io/healthcheck-path: /sveltekit
 spec:
   selector:
     app: sveltekit-app
@@ -512,6 +504,8 @@ spec:
     name: vue-app
     namespace: test-apps
 ---
+# Host-based ALB routing so each app owns / (and thus /__odigos/*) for the browser proxy.
+# Resolve *.browser-test to the ALB address (see README / deploy.sh output).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -526,54 +520,63 @@ metadata:
 spec:
   ingressClassName: alb
   rules:
-    - http:
+    - host: react.browser-test
+      http:
         paths:
-          - path: /react
+          - path: /
             pathType: Prefix
             backend:
               service:
                 name: react-app
                 port:
                   number: 80
-          - path: /vue
+    - host: vue.browser-test
+      http:
+        paths:
+          - path: /
             pathType: Prefix
             backend:
               service:
                 name: vue-app
                 port:
                   number: 80
-          - path: /angular
+    - host: angular.browser-test
+      http:
+        paths:
+          - path: /
             pathType: Prefix
             backend:
               service:
                 name: angular-app
                 port:
                   number: 80
-          - path: /next
+    - host: next.browser-test
+      http:
+        paths:
+          - path: /
             pathType: Prefix
             backend:
               service:
                 name: next-app
                 port:
                   number: 3000
-          - path: /nuxt
+    - host: nuxt.browser-test
+      http:
+        paths:
+          - path: /
             pathType: Prefix
             backend:
               service:
                 name: nuxt-app
                 port:
                   number: 3000
-          - path: /sveltekit
+    - host: sveltekit.browser-test
+      http:
+        paths:
+          - path: /
             pathType: Prefix
             backend:
               service:
                 name: sveltekit-app
                 port:
                   number: 3000
-          - path: /api
-            pathType: Prefix
-            backend:
-              service:
-                name: backend-1
-                port:
-                  number: 3001

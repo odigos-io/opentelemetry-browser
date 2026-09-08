@@ -6,6 +6,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REGISTRY="${REGISTRY:-us-central1-docker.pkg.dev/odigos-cloud/staging-components}"
 PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
+HOST_SUFFIX="${HOST_SUFFIX:-browser-test}"
 
 apps=(
   "react:react-app:browser-otel-react:dev"
@@ -22,6 +23,7 @@ for entry in "${apps[@]}"; do
   IFS=":" read -r name dir image tag <<<"$entry"
   full="${REGISTRY}/${image}:${tag}"
   echo "==> Building & pushing ${full} (${PLATFORMS})"
+  # shellcheck disable=SC2086
   docker buildx build --platform "${PLATFORMS}" -t "${full}" --push ${BUILDX_EXTRA:-} "${SCRIPT_DIR}/${dir}"
 done
 
@@ -41,16 +43,24 @@ kubectl rollout status deploy/sveltekit-app -n test-apps --timeout=180s
 echo
 ALB="$(kubectl get ingress browser-test -n test-apps -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)"
 if [[ -n "${ALB}" ]]; then
-  echo "Shared ALB: http://${ALB}"
-  echo "  http://${ALB}/react/"
-  echo "  http://${ALB}/vue/"
-  echo "  http://${ALB}/angular/"
-  echo "  http://${ALB}/next/"
-  echo "  http://${ALB}/nuxt/"
-  echo "  http://${ALB}/sveltekit/"
-  echo "  http://${ALB}/jaeger/"
+  ALB_IP="$(dig +short "${ALB}" | head -n1 || true)"
+  echo "Shared ALB: ${ALB}"
+  echo "Host-based apps (add to /etc/hosts${ALB_IP:+ pointing at ${ALB_IP}}):"
+  for h in react vue angular next nuxt sveltekit; do
+    echo "  http://${h}.${HOST_SUFFIX}/"
+  done
+  if [[ -n "${ALB_IP}" ]]; then
+    echo
+    echo "  sudo tee -a /etc/hosts >/dev/null <<'EOF'"
+    echo "  ${ALB_IP} react.${HOST_SUFFIX} vue.${HOST_SUFFIX} angular.${HOST_SUFFIX} next.${HOST_SUFFIX} nuxt.${HOST_SUFFIX} sveltekit.${HOST_SUFFIX}"
+    echo "  EOF"
+  fi
+  echo
+  echo "Smoke-test without /etc/hosts:"
+  echo "  curl -sS -H 'Host: react.${HOST_SUFFIX}' http://${ALB}/ | grep __odigos"
+  echo "  curl -sS -H 'Host: react.${HOST_SUFFIX}' http://${ALB}/__odigos/config.js"
 else
-  echo "All apps deployed to the test-apps namespace. Port-forward to open them:"
+  echo "All apps deployed. Port-forward to open them:"
   echo "  kubectl port-forward svc/react-app     8081:80"
   echo "  kubectl port-forward svc/vue-app       8082:80"
   echo "  kubectl port-forward svc/angular-app   8083:80"

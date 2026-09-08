@@ -11,7 +11,6 @@ export default defineNuxtConfig({
     "/api/**": { proxy: `${BACKEND1_URL}/**` },
   },
   app: {
-    baseURL: "/nuxt/",
     head: {
       title: "Browser OTel - Nuxt (SSR)",
     },

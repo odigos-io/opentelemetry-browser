@@ -78,27 +78,46 @@ per request. Both use a multi-stage Dockerfile.
 ```
 
 This builds `browser-otel-{react,vue,angular,next,nuxt,sveltekit}:dev` plus the two backends for
-`linux/amd64` and `linux/arm64`, pushes them to `staging-registry.odigos.io`, and applies the
-manifests to the `test-apps` namespace.
+`linux/amd64` and `linux/arm64`, pushes them to Artifact Registry
+(`us-central1-docker.pkg.dev/odigos-cloud/staging-components/`, pulled via
+`staging-registry.odigos.io`), and applies the manifests to the `test-apps` namespace.
 
 ## Open the apps
 
-After deploy, get the shared ALB hostname:
+Ingress is **host-based** on one shared ALB so each app owns `/` (and `/__odigos/*` for the
+browser proxy). Hosts:
+
+| Host                     | Service       |
+| ------------------------ | ------------- |
+| `react.browser-test`     | react-app     |
+| `vue.browser-test`       | vue-app       |
+| `angular.browser-test`   | angular-app   |
+| `next.browser-test`      | next-app      |
+| `nuxt.browser-test`      | nuxt-app      |
+| `sveltekit.browser-test` | sveltekit-app |
+
+Jaeger has its own Ingress/ALB in `destinations` (open that hostname directly — no `/etc/hosts` entry):
 
 ```bash
-kubectl get ingress react-app -n test-apps -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'; echo
+kubectl get ingress jaeger-ui -n destinations -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'; echo
 ```
 
-Then open (same host, path prefixes):
+```bash
+ALB=$(kubectl get ingress browser-test -n test-apps -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+ALB_IP=$(dig +short "$ALB" | head -n1)
+sudo tee -a /etc/hosts >/dev/null <<EOF
+${ALB_IP} react.browser-test vue.browser-test angular.browser-test next.browser-test nuxt.browser-test sveltekit.browser-test
+EOF
+```
 
-```text
-http://<alb>/react/
-http://<alb>/vue/
-http://<alb>/angular/
-http://<alb>/next/
-http://<alb>/nuxt/
-http://<alb>/sveltekit/
-http://<alb>/jaeger/
+Then open `http://react.browser-test/`, etc. Same-origin `/api/chain` still goes through each
+app’s nginx/SSR proxy to `backend-1`.
+
+Smoke-test without editing hosts:
+
+```bash
+curl -sS -H 'Host: react.browser-test' "http://${ALB}/" | grep __odigos
+curl -sS -H 'Host: react.browser-test' "http://${ALB}/__odigos/config.js"
 ```
 
 Or port-forward locally:
@@ -109,15 +128,15 @@ kubectl port-forward svc/react-app     8081:80     # http://localhost:8081
 kubectl port-forward svc/vue-app       8082:80     # http://localhost:8082
 kubectl port-forward svc/angular-app   8083:80     # http://localhost:8083
 # SSR apps (Node server, port 3000):
-kubectl port-forward svc/next-app      8084:3000   # http://localhost:8084/next/
-kubectl port-forward svc/nuxt-app      8085:3000   # http://localhost:8085/nuxt/
-kubectl port-forward svc/sveltekit-app 8086:3000   # http://localhost:8086/sveltekit/
+kubectl port-forward svc/next-app      8084:3000   # http://localhost:8084
+kubectl port-forward svc/nuxt-app      8085:3000   # http://localhost:8085
+kubectl port-forward svc/sveltekit-app 8086:3000   # http://localhost:8086
 ```
 
 ## Build a single app manually
 
 ```bash
-IMAGE=staging-registry.odigos.io/browser-otel-react:dev
+IMAGE=us-central1-docker.pkg.dev/odigos-cloud/staging-components/browser-otel-react:dev
 docker buildx build --platform linux/amd64,linux/arm64 -t "$IMAGE" --push ./react-app
 kubectl apply -f k8s.yaml
 ```

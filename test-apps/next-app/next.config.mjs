@@ -7,7 +7,6 @@ const BACKEND1_URL =
 
 /** @type {import('next').NextConfig} */
 export default {
-  basePath: "/next",
   async rewrites() {
     return [{ source: "/api/:path*", destination: `${BACKEND1_URL}/:path*` }];
   },
