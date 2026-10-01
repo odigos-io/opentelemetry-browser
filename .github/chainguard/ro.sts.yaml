@@ -1,5 +1,5 @@
 issuer: https://token.actions.githubusercontent.com
-subject_pattern: "^repo:odigos-io/opentelemetry-browser:(pull_request|ref:.*)$"
+subject_pattern: "^repo:odigos-io(@84347062)?/opentelemetry-browser(@1280051899)?:(pull_request|ref:.*)$"
 
 permissions:
   contents: read
