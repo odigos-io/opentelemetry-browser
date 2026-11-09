@@ -201,7 +201,7 @@ jobs:
   # ── 6. Trigger agent version update in consumer repos ────────────────────
   # Opens auto-merge PRs in the consumer repos bumping the browser-community agent version.
   # The browser agent runs in the end-user's browser rather than attaching to a process:
-  # odigos (OSS) and odigos-enterprise deliver it via the odiglet agents image + the
+  # odigos delivers it via the odiglet agents image + the
   # odigos-browser-proxy sidecar, while vm-agent bundles it under /instrumentations/browser
   # to be served by its browser proxy.
   trigger-odigos-update:
@@ -218,5 +218,4 @@ jobs:
           version: ${{ needs.calculate.outputs.new_version }}
           consumers: |
             odigos
-            odigos-enterprise
             vm-agent
